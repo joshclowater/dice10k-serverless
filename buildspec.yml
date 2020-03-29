@@ -13,9 +13,9 @@ phases:
       - pip install --upgrade pip
       - pip install pipenv --user
       - pipenv install awscli aws-sam-cli
-      - pipenv run sam package --template-file ./template.yml --s3-bucket "werewolves.io-serverless" --output-template-file packaged-template.yml
+      - pipenv run sam package --template-file ./template.yml --s3-bucket "dice10k-serverless" --output-template-file packaged-template.yml
       - ls
-      - pipenv run sam deploy --template-file ./packaged-template.yml --stack-name "werewolvesio-serverless" --capabilities CAPABILITY_IAM
+      - pipenv run sam deploy --template-file ./packaged-template.yml --stack-name "dice10k-serverless" --capabilities CAPABILITY_IAM
 artifacts:
   files:
     - packaged-template.yml
