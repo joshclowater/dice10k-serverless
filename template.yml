@@ -207,7 +207,7 @@ Resources:
       - DynamoDBCrudPolicy:
           TableName: !Ref PlayerTableName
       - DynamoDBCrudPolicy:
-        TableName: !Ref GameTableName
+          TableName: !Ref GameTableName
       - Statement:
         - Effect: Allow
           Action:
