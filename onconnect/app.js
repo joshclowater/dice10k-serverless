@@ -2,6 +2,8 @@ const AWS = require('aws-sdk');
 AWS.config.update({ region: process.env.AWS_REGION });
 const ddb = new AWS.DynamoDB.DocumentClient();
 
+const { PLAYER_TABLE_NAME } = process.env;
+
 exports.handler = async (event) => {
 
   const { connectionId } = event.requestContext;
@@ -10,7 +12,7 @@ exports.handler = async (event) => {
   console.log('onconnect', logContext);
 
   await ddb.put({
-    TableName: process.env.PLAYER_TABLE_NAME,
+    TableName: PLAYER_TABLE_NAME,
     Item: {
       connectionId,
       status: 'pending',
