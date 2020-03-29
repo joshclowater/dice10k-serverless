@@ -1,0 +1,21 @@
+
+# https://docs.aws.amazon.com/codepipeline/latest/userguide/tutorials-serverlessrepo-auto-publish.html
+
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+        python: 3.8
+  build:
+    commands:
+      - echo Build started on `date`
+      - ls
+      - pip install --upgrade pip
+      - pip install pipenv --user
+      - pipenv install awscli aws-sam-cli
+      - pipenv run sam package --template-file ./template.yml --s3-bucket "werewolves.io-serverless" --output-template-file packaged-template.yml
+      - ls
+      - pipenv run sam deploy --template-file ./packaged-template.yml --stack-name "werewolvesio-serverless" --capabilities CAPABILITY_IAM
+artifacts:
+  files:
+    - packaged-template.yml

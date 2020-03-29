@@ -1,0 +1,8 @@
+{
+  "name": "on-disconnect",
+  "version": "1.0.0",
+  "description": "ondisconnect example for WebSockets on API Gateway",
+  "dependencies": {
+    "aws-sdk": "^2.434.0"
+  }
+}
