@@ -31,7 +31,11 @@ exports.handler = async (event) => {
   await ddb.update({
     TableName: PLAYER_TABLE_NAME,
     Key: { connectionId },
-    UpdateExpression: 'SET status = :s, gameId = :g, name = :n',
+    UpdateExpression: 'SET #s = :s, gameId = :g, #n = :n',
+    ExpressionAttributeNames: {
+      '#s': 'status',
+      '#n': 'name'
+    },
     ExpressionAttributeValues: {
       ':s': 'in-game',
       ':g': gameName,
@@ -39,10 +43,9 @@ exports.handler = async (event) => {
     }
   }).promise();
 
-  log.info('created game', logContext);
+  console.log('created game', logContext);
 
-  return { statusCode: 200 };
-  // TODO do the non connect ones need this return value?
+  return { statusCode: 200, body: 'Created game' };
 };
 
 const makeId = () => {
