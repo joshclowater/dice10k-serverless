@@ -91,12 +91,33 @@ Resources:
       IntegrationUri: 
         Fn::Sub:
             arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SendMessageFunction.Arn}/invocations
+  CreateRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref DicekWebsocket
+      RouteKey: creategame
+      AuthorizationType: NONE
+      OperationName: CreateRoute
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref CreateInteg
+  CreateInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref DicekWebsocket
+      Description: Create Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: 
+        Fn::Sub:
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CreateGameFunction.Arn}/invocations
   Deployment:
     Type: AWS::ApiGatewayV2::Deployment
     DependsOn:
     - ConnectRoute
-    - SendRoute
     - DisconnectRoute
+    - SendRoute
+    - CreateRoute
     Properties:
       ApiId: !Ref DicekWebsocket
   Stage:
@@ -223,6 +244,37 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName: !Ref SendMessageFunction
       Principal: apigateway.amazonaws.com
+  CreateGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: creategame/
+      Handler: app.handler
+      MemorySize: 256
+      Runtime: nodejs12.x
+      Environment:
+        Variables:
+          PLAYER_TABLE_NAME: !Ref PlayerTableName
+          GAME_TABLE_NAME: !Ref GameTableName
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName: !Ref PlayerTableName
+      - DynamoDBCrudPolicy:
+          TableName: !Ref GameTableName
+      - Statement:
+        - Effect: Allow
+          Action:
+          - 'execute-api:ManageConnections'
+          Resource:
+          - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DicekWebsocket}/*'
+  CreateGamePermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - DicekWebsocket
+      - CreateGameFunction
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref CreateGameFunction
+      Principal: apigateway.amazonaws.com
 
 Outputs:
   GamesTableArn:
@@ -244,6 +296,10 @@ Outputs:
   SendMessageFunctionArn:
     Description: "SendMessage function ARN"
     Value: !GetAtt SendMessageFunction.Arn
+  
+  CreateGameFunctionArn:
+    Description: "CreateGame function ARN"
+    Value: !GetAtt CreateGameFunction.Arn
 
   WebSocketURI:
     Description: "The WSS Protocol URI to connect to"

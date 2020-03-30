@@ -1,7 +1,7 @@
 {
-  "name": "on-disconnect",
+  "name": "create-game",
   "version": "1.0.0",
-  "description": "disconnect handler",
+  "description": "create game handler",
   "dependencies": {
     "aws-sdk": "^2.434.0"
   }

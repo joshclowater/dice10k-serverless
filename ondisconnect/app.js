@@ -13,9 +13,7 @@ exports.handler = async (event) => {
 
   await ddb.delete({
     TableName: PLAYER_TABLE_NAME,
-    Key: {
-      connectionId
-    }
+    Key: { connectionId }
   }).promise();
 
   return { statusCode: 200, body: 'Disconnected.' };
