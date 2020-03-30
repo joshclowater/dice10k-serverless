@@ -43,6 +43,28 @@ exports.handler = async (event) => {
     }
   }).promise();
 
+  const apigwManagementApi = new AWS.ApiGatewayManagementApi({
+    apiVersion: '2018-11-29',
+    endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
+  });
+  
+  try {
+    await apigwManagementApi.postToConnection({
+      ConnectionId: connectionId,
+      Data: JSON.stringify({
+        message: 'joinedgame',
+        gameName
+      })
+    }).promise();
+  } catch (e) {
+    if (e.statusCode === 410) {
+      console.log(`Found stale connection, deleting ${connectionId}`);
+      // TODO delete game...?
+    } else {
+      throw e;
+    }
+  }
+  
   console.log('created game', logContext);
 
   return { statusCode: 200, body: 'Created game' };
