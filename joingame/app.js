@@ -10,23 +10,26 @@ const {
 exports.handler = async (event) => {
 
   const { connectionId } = event.requestContext;
-  const { name: playerName } = JSON.parse(event.body);
-  const logContext = { connectionId, playerName };
+  const { name: playerName, gameId } = JSON.parse(event.body);
+  const logContext = { connectionId, playerName, gameName };
   
-  console.log('creategame', logContext);
-  
-  const gameName = makeId();
-  logContext.gameName = gameName;
+  console.log('joingame', logContext);
 
-  await ddb.put({
-    TableName: GAME_TABLE_NAME,
-    Item: {
-      name: gameName,
-      gameStatus: 'waiting-for-players',
-      players: [{ connectionId, name: playerName }],
-      createdOn: new Date().toISOString()
-    }
-  }).promise();
+  let game;
+  try {
+    game = await ddb.put({
+      TableName: GAME_TABLE_NAME,
+      Key: { name: gameId },
+      UpdateExpression: 'SET players = list_append(players, :p)',
+      ExpressionAttributeValues: {
+        ':p': { connectionId, name: playerName }
+      },
+      ReturnValues: 'UPDATED_NEW'
+    }).promise();
+  } catch (e) {
+    console.log('Error adding player to game', e.stack);
+    return { statusCode: 400 };
+  }
 
   await ddb.update({
     TableName: PLAYER_TABLE_NAME,
@@ -48,12 +51,14 @@ exports.handler = async (event) => {
     endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
   });
   
+  // TODO send to all players in game
+  console.log('game', game);
+
   try {
     await apigwManagementApi.postToConnection({
       ConnectionId: connectionId,
       Data: JSON.stringify({
         message: 'joinedgame',
-        playerName,
         gameName
       })
     }).promise();
@@ -66,16 +71,7 @@ exports.handler = async (event) => {
     }
   }
   
-  console.log('created game', logContext);
+  console.log('joined game', logContext);
 
-  return { statusCode: 200, body: 'Created game' };
-};
-
-const makeId = () => {
-  let id = '';
-  const possible = 'abcdefghijklmnopqrstuvwxyz';
-  for (var i = 0; i < 5; i++) {
-    id += possible.charAt(Math.floor(Math.random() * possible.length));
-  }
-  return id;
+  return { statusCode: 200, body: 'Joined game' };
 };

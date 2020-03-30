@@ -111,6 +111,26 @@ Resources:
       IntegrationUri: 
         Fn::Sub:
             arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CreateGameFunction.Arn}/invocations
+  JoinRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref DicekWebsocket
+      RouteKey: joingame
+      AuthorizationType: NONE
+      OperationName: JoinRoute
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref JoinInteg
+  JoinInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref DicekWebsocket
+      Description: Join Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: 
+        Fn::Sub:
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${JoinGameFunction.Arn}/invocations
   Deployment:
     Type: AWS::ApiGatewayV2::Deployment
     DependsOn:
@@ -118,6 +138,7 @@ Resources:
     - DisconnectRoute
     - SendRoute
     - CreateRoute
+    - JoinRoute
     Properties:
       ApiId: !Ref DicekWebsocket
   Stage:
@@ -275,32 +296,39 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName: !Ref CreateGameFunction
       Principal: apigateway.amazonaws.com
+  JoinGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: joingame/
+      Handler: app.handler
+      MemorySize: 256
+      Runtime: nodejs12.x
+      Environment:
+        Variables:
+          PLAYER_TABLE_NAME: !Ref PlayerTableName
+          GAME_TABLE_NAME: !Ref GameTableName
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName: !Ref PlayerTableName
+      - DynamoDBCrudPolicy:
+          TableName: !Ref GameTableName
+      - Statement:
+        - Effect: Allow
+          Action:
+          - 'execute-api:ManageConnections'
+          Resource:
+          - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DicekWebsocket}/*'
+  JoinGamePermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - DicekWebsocket
+      - JoinGameFunction
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref JoinGameFunction
+      Principal: apigateway.amazonaws.com
 
 Outputs:
-  GamesTableArn:
-    Description: "Games table ARN"
-    Value: !GetAtt GamesTable.Arn
-
-  PlayersTableArn:
-    Description: "Players table ARN"
-    Value: !GetAtt PlayersTable.Arn
-
-  OnConnectFunctionArn:
-    Description: "OnConnect function ARN"
-    Value: !GetAtt OnConnectFunction.Arn
-
-  OnDisconnectFunctionArn:
-    Description: "OnDisconnect function ARN"
-    Value: !GetAtt OnDisconnectFunction.Arn
-
-  SendMessageFunctionArn:
-    Description: "SendMessage function ARN"
-    Value: !GetAtt SendMessageFunction.Arn
-  
-  CreateGameFunctionArn:
-    Description: "CreateGame function ARN"
-    Value: !GetAtt CreateGameFunction.Arn
-
   WebSocketURI:
     Description: "The WSS Protocol URI to connect to"
     Value: !Join [ '', [ 'wss://', !Ref DicekWebsocket, '.execute-api.',!Ref 'AWS::Region','.amazonaws.com/',!Ref 'Stage'] ]

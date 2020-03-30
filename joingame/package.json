@@ -1,0 +1,8 @@
+{
+  "name": "join-game",
+  "version": "1.0.0",
+  "description": "join game handler",
+  "dependencies": {
+    "aws-sdk": "^2.434.0"
+  }
+}
