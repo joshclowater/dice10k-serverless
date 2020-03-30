@@ -15,13 +15,13 @@ exports.handler = async (event) => {
   
   console.log('creategame', logContext);
   
-  const gameName = makeId();
-  logContext.gameName = gameName;
+  const gameId = makeId();
+  logContext.gameId = gameId;
 
   await ddb.put({
     TableName: GAME_TABLE_NAME,
     Item: {
-      name: gameName,
+      name: gameId,
       gameStatus: 'waiting-for-players',
       players: [{ connectionId, name: playerName }],
       createdOn: new Date().toISOString()
@@ -38,7 +38,7 @@ exports.handler = async (event) => {
     },
     ExpressionAttributeValues: {
       ':s': 'in-game',
-      ':g': gameName,
+      ':g': gameId,
       ':n': playerName
     }
   }).promise();
@@ -54,7 +54,7 @@ exports.handler = async (event) => {
       Data: JSON.stringify({
         message: 'joinedgame',
         playerName,
-        gameName
+        gameId
       })
     }).promise();
   } catch (e) {
