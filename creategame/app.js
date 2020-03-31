@@ -53,8 +53,8 @@ exports.handler = async (event) => {
       ConnectionId: connectionId,
       Data: JSON.stringify({
         message: 'joinedgame',
-        playerName,
-        gameId
+        gameId,
+        playerName
       })
     }).promise();
   } catch (e) {

@@ -131,6 +131,26 @@ Resources:
       IntegrationUri: 
         Fn::Sub:
             arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${JoinGameFunction.Arn}/invocations
+  RollRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref DicekWebsocket
+      RouteKey: rolldice
+      AuthorizationType: NONE
+      OperationName: RollRoute
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref RollInteg
+  RollInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref DicekWebsocket
+      Description: Roll Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: 
+        Fn::Sub:
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${RollDiceFunction.Arn}/invocations
   Deployment:
     Type: AWS::ApiGatewayV2::Deployment
     DependsOn:
@@ -139,6 +159,7 @@ Resources:
     - SendRoute
     - CreateRoute
     - JoinRoute
+    - RollRoute
     Properties:
       ApiId: !Ref DicekWebsocket
   Stage:
@@ -327,7 +348,37 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName: !Ref JoinGameFunction
       Principal: apigateway.amazonaws.com
-
+  RollDiceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: rolldice/
+      Handler: app.handler
+      MemorySize: 256
+      Runtime: nodejs12.x
+      Environment:
+        Variables:
+          PLAYER_TABLE_NAME: !Ref PlayerTableName
+          GAME_TABLE_NAME: !Ref GameTableName
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName: !Ref PlayerTableName
+      - DynamoDBCrudPolicy:
+          TableName: !Ref GameTableName
+      - Statement:
+        - Effect: Allow
+          Action:
+          - 'execute-api:ManageConnections'
+          Resource:
+          - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DicekWebsocket}/*'
+  RollDicePermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - DicekWebsocket
+      - RollDiceFunction
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref RollDiceFunction
+      Principal: apigateway.amazonaws.com
 Outputs:
   WebSocketURI:
     Description: "The WSS Protocol URI to connect to"

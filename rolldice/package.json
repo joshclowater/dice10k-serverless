@@ -1,0 +1,8 @@
+{
+  "name": "roll-dice",
+  "version": "1.0.0",
+  "description": "roll dice handler",
+  "dependencies": {
+    "aws-sdk": "^2.434.0"
+  }
+}
