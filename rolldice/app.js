@@ -50,10 +50,12 @@ exports.handler = async (event) => {
       await apigwManagementApi.postToConnection({
         ConnectionId: playerConnectionId,
         Data: JSON.stringify({
-          message: 'rolleddice',
-          gameId,
-          playerName,
-          diceRolls
+          type: 'game/rolleddice',
+          payload: {
+            gameId,
+            playerName,
+            diceRolls
+          }
         })
       }).promise();
     } catch (e) {

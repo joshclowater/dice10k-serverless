@@ -52,9 +52,11 @@ exports.handler = async (event) => {
     await apigwManagementApi.postToConnection({
       ConnectionId: connectionId,
       Data: JSON.stringify({
-        message: 'joinedgame',
-        gameId,
-        playerName
+        type: 'game/joinedgame',
+        payload: {
+          gameId,
+          playerName
+        }
       })
     }).promise();
   } catch (e) {
