@@ -18,12 +18,13 @@ exports.handler = async (event) => {
   const gameId = makeId();
   logContext.gameId = gameId;
 
+  const players = [{ connectionId, name: playerName }];
   await ddb.put({
     TableName: GAME_TABLE_NAME,
     Item: {
       name: gameId,
       gameStatus: 'waiting-for-players',
-      players: [{ connectionId, name: playerName }],
+      players,
       createdOn: new Date().toISOString()
     }
   }).promise();
@@ -52,10 +53,11 @@ exports.handler = async (event) => {
     await apigwManagementApi.postToConnection({
       ConnectionId: connectionId,
       Data: JSON.stringify({
-        type: 'game/joinedgame',
+        type: 'game/youjoinedgame',
         payload: {
           gameId,
-          playerName
+          playerName,
+          players
         }
       })
     }).promise();

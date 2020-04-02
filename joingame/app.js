@@ -58,16 +58,28 @@ exports.handler = async (event) => {
   });
 
   const postCalls = players.map(async ({ connectionId: playerConnectionId }) => {
+    let data;
+    if (playerConnectionId === connectionId) {
+      data = {
+        type: 'game/youjoinedgame',
+        payload: {
+          gameId,
+          playerName,
+          players
+        }
+      }
+    } else {
+      data = {
+        type: 'game/joinedgame',
+        payload: {
+          playerName
+        }
+      }
+    }
     try {
       await apigwManagementApi.postToConnection({
         ConnectionId: playerConnectionId,
-        Data: JSON.stringify({
-          type: 'game/joinedgame',
-          payload: {
-            gameId,
-            playerName
-          }
-        })
+        Data: JSON.stringify(data)
       }).promise();
     } catch (e) {
       if (e.statusCode === 410) {
