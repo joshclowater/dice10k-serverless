@@ -15,6 +15,45 @@ exports.handler = async (event) => {
   
   console.log('joingame', logContext);
 
+  const apigwManagementApi = new AWS.ApiGatewayManagementApi({
+    apiVersion: '2018-11-29',
+    endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
+  });
+
+  const { Item: existingGame } = await ddb.get({
+    TableName: GAME_TABLE_NAME,
+    Key: {
+      name: gameId
+    }
+  }).promise();
+
+  let errorMessage;
+  if (!existingGame) {
+    errorMessage = 'Game with this Game ID not found';
+  } else if (existingGame.players.find(({ name }) => name === playerName)) {
+    errorMessage = 'A player already exists in the game with this name';
+  }
+  if (errorMessage) {
+    console.log(errorMessage, logContext);
+    try {
+      await apigwManagementApi.postToConnection({
+        ConnectionId: connectionId,
+        Data: JSON.stringify({
+          type: 'joingame/failedtojoin',
+          payload: { errorMessage }
+        })
+      }).promise();
+    } catch (e) {
+      if (e.statusCode === 410) {
+        console.log(`Found stale connection ${connectionId}`);
+      } else {
+        console.error(`Unexpected error occured sending message to connection ${connectionId}`, e.stack);
+        throw e;
+      }
+    }
+    return { statusCode: 400, body: errorMessage };
+  }
+
   let game;
   try {
     game = await ddb.update({
@@ -27,8 +66,8 @@ exports.handler = async (event) => {
       ReturnValues: 'UPDATED_NEW'
     }).promise();
   } catch (e) {
-    console.log('Error adding player to game', e.stack);
-    return { statusCode: 400 };
+    console.error('Error adding player to game', e.stack);
+    return { statusCode: 500 };
   }
 
   const { players } = game.Attributes;
@@ -52,11 +91,6 @@ exports.handler = async (event) => {
     }
   }).promise();
 
-  const apigwManagementApi = new AWS.ApiGatewayManagementApi({
-    apiVersion: '2018-11-29',
-    endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
-  });
-
   const postCalls = players.map(async ({ connectionId: playerConnectionId }) => {
     let data;
     if (playerConnectionId === connectionId) {
@@ -67,14 +101,14 @@ exports.handler = async (event) => {
           playerName,
           players
         }
-      }
+      };
     } else {
       data = {
         type: 'game/joinedgame',
         payload: {
           playerName
         }
-      }
+      };
     }
     try {
       await apigwManagementApi.postToConnection({
