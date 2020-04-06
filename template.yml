@@ -151,6 +151,26 @@ Resources:
       IntegrationUri: 
         Fn::Sub:
             arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${RollDiceFunction.Arn}/invocations
+  StartRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref DicekWebsocket
+      RouteKey: startgame
+      AuthorizationType: NONE
+      OperationName: StartRoute
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref StartInteg
+  StartInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref DicekWebsocket
+      Description: Start Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: 
+        Fn::Sub:
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${StartGameFunction.Arn}/invocations
   Deployment:
     Type: AWS::ApiGatewayV2::Deployment
     DependsOn:
@@ -160,6 +180,7 @@ Resources:
     - CreateRoute
     - JoinRoute
     - RollRoute
+    - StartRoute
     Properties:
       ApiId: !Ref DicekWebsocket
   Stage:
@@ -360,7 +381,7 @@ Resources:
           PLAYER_TABLE_NAME: !Ref PlayerTableName
           GAME_TABLE_NAME: !Ref GameTableName
       Policies:
-      - DynamoDBCrudPolicy:
+      - DynamoDBReadPolicy:
           TableName: !Ref PlayerTableName
       - DynamoDBCrudPolicy:
           TableName: !Ref GameTableName
@@ -378,6 +399,37 @@ Resources:
     Properties:
       Action: lambda:InvokeFunction
       FunctionName: !Ref RollDiceFunction
+      Principal: apigateway.amazonaws.com
+  StartGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: startgame/
+      Handler: app.handler
+      MemorySize: 256
+      Runtime: nodejs12.x
+      Environment:
+        Variables:
+          PLAYER_TABLE_NAME: !Ref PlayerTableName
+          GAME_TABLE_NAME: !Ref GameTableName
+      Policies:
+      - DynamoDBReadPolicy:
+          TableName: !Ref PlayerTableName
+      - DynamoDBCrudPolicy:
+          TableName: !Ref GameTableName
+      - Statement:
+        - Effect: Allow
+          Action:
+          - 'execute-api:ManageConnections'
+          Resource:
+          - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DicekWebsocket}/*'
+  StartGamePermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - DicekWebsocket
+      - StartGameFunction
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref StartGameFunction
       Principal: apigateway.amazonaws.com
 Outputs:
   WebSocketURI:

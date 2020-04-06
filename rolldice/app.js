@@ -77,7 +77,7 @@ exports.handler = async (event) => {
 
   console.log('rolled dice', { ...logContext, diceRolls });
 
-  return { statusCode: 200, body: 'Joined game' };
+  return { statusCode: 200, body: 'Rolled dice' };
 };
 
 /**

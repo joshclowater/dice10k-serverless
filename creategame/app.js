@@ -23,7 +23,7 @@ exports.handler = async (event) => {
     TableName: GAME_TABLE_NAME,
     Item: {
       name: gameId,
-      gameStatus: 'waiting-for-players',
+      status: 'waiting-for-players',
       players,
       createdOn: new Date().toISOString()
     }

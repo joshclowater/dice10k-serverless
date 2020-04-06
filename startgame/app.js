@@ -10,17 +10,26 @@ const {
 exports.handler = async (event) => {
 
   const { connectionId } = event.requestContext;
-  const { name: playerName, gameId } = JSON.parse(event.body);
-  const logContext = { connectionId, playerName, gameId };
-  
-  console.log('joingame', logContext);
+  const { Item: player } = await ddb.get({
+    TableName: PLAYER_TABLE_NAME,
+    Key: {
+      connectionId
+    }
+  }).promise();
+  const { gameId, name: playerName } = player;
+  const logContext = {
+    connectionId,
+    gameId,
+    playerName
+  };
+  console.log('startgame', logContext);
 
   const apigwManagementApi = new AWS.ApiGatewayManagementApi({
     apiVersion: '2018-11-29',
     endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
   });
 
-  const { Item: existingGame } = await ddb.get({
+  const { Item: game } = await ddb.get({
     TableName: GAME_TABLE_NAME,
     Key: {
       name: gameId
@@ -28,12 +37,12 @@ exports.handler = async (event) => {
   }).promise();
 
   let errorMessage;
-  if (!existingGame) {
-    errorMessage = 'Game with this Game ID not found';
-  } else if (existingGame.status !== 'waiting-for-players') {
-    errorMessage = 'This game has already started';
-  } else if (existingGame.players.find(({ name }) => name === playerName)) {
-    errorMessage = 'A player already exists in the game with this name';
+  if (!game) {
+    errorMessage = 'Player not yet connected to game';
+  } else if (game.status != 'waiting-for-players') {
+    errorMessage = 'Game has already started';
+  } else if (game.players.length < 2) {
+    errorMessage = 'Must be more than two players to start';
   }
   if (errorMessage) {
     console.log(errorMessage, logContext);
@@ -41,7 +50,7 @@ exports.handler = async (event) => {
       await apigwManagementApi.postToConnection({
         ConnectionId: connectionId,
         Data: JSON.stringify({
-          type: 'joingame/failedtojoin',
+          type: 'game/failedtostartgame',
           payload: { errorMessage }
         })
       }).promise();
@@ -56,66 +65,41 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: errorMessage };
   }
 
-  let game;
+  const playerNames = game.players.map(player => player.name);
+  shuffleArray(playerNames);
+
   try {
-    game = await ddb.update({
+    await ddb.update({
       TableName: GAME_TABLE_NAME,
-      Key: { name: gameId },
-      UpdateExpression: 'SET players = list_append(players, :p)',
-      ExpressionAttributeValues: {
-        ':p': [{ connectionId, name: playerName }]
+      Key: { name: game.name },
+      UpdateExpression: 'SET #s = :s, round = :r, playerTurn = :t, playerTurns = :p',
+      ExpressionAttributeNames: {
+        '#s': 'status'
       },
-      ReturnValues: 'UPDATED_NEW'
+      ExpressionAttributeValues: {
+        ':s': 'in-progress',
+        ':r': 1,
+        ':t': 0,
+        ':p': playerNames
+      },
+      ReturnValues: 'NONE'
     }).promise();
   } catch (e) {
     console.error('Error adding player to game', e.stack);
     return { statusCode: 500 };
   }
 
-  const { players } = game.Attributes;
-  console.log('updated players', {
-    ...logContext,
-    players
-  });
-
-  await ddb.update({
-    TableName: PLAYER_TABLE_NAME,
-    Key: { connectionId },
-    UpdateExpression: 'SET #s = :s, gameId = :g, #n = :n',
-    ExpressionAttributeNames: {
-      '#s': 'status',
-      '#n': 'name'
-    },
-    ExpressionAttributeValues: {
-      ':s': 'in-game',
-      ':g': gameId,
-      ':n': playerName
-    }
-  }).promise();
-
-  const postCalls = players.map(async ({ connectionId: playerConnectionId }) => {
-    let data;
-    if (playerConnectionId === connectionId) {
-      data = {
-        type: 'game/youjoinedgame',
-        payload: {
-          gameId,
-          playerName,
-          players
-        }
-      };
-    } else {
-      data = {
-        type: 'game/joinedgame',
-        payload: {
-          playerName
-        }
-      };
-    }
+  const postCalls = game.players.map(async ({ connectionId: playerConnectionId }) => {
     try {
       await apigwManagementApi.postToConnection({
         ConnectionId: playerConnectionId,
-        Data: JSON.stringify(data)
+        Data: JSON.stringify({
+          type: 'game/gamestarted',
+          payload: {
+            round: 1,
+            playersTurn: playerNames[0]
+          }
+        })
       }).promise();
     } catch (e) {
       if (e.statusCode === 410) {
@@ -134,7 +118,18 @@ exports.handler = async (event) => {
     return { statusCode: 500, body: e.stack };
   }
 
-  console.log('joined game', logContext);
+  console.log('started game', logContext);
 
-  return { statusCode: 200, body: 'Joined game' };
+  return { statusCode: 200, body: 'Started game' };
 };
+
+/**
+ * @param {Array} array 
+ * @return {Array} array with items shuffled.
+ */
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+  }
+}
