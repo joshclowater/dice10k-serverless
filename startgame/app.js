@@ -68,26 +68,23 @@ exports.handler = async (event) => {
   const playerNames = game.players.map(player => player.name);
   shuffleArray(playerNames);
 
-  try {
-    await ddb.update({
-      TableName: GAME_TABLE_NAME,
-      Key: { name: game.name },
-      UpdateExpression: 'SET #s = :s, round = :r, playerTurn = :t, playerTurns = :p',
-      ExpressionAttributeNames: {
-        '#s': 'status'
-      },
-      ExpressionAttributeValues: {
-        ':s': 'in-progress',
-        ':r': 1,
-        ':t': 0,
-        ':p': playerNames
-      },
-      ReturnValues: 'NONE'
-    }).promise();
-  } catch (e) {
-    console.error('Error adding player to game', e.stack);
-    return { statusCode: 500 };
-  }
+  await ddb.update({
+    TableName: GAME_TABLE_NAME,
+    Key: { name: game.name },
+    UpdateExpression: 'SET #s = :s, playerTurns = :p, round = :r, playerTurn = :t, diceKept = :k, diceRolled = :d',
+    ExpressionAttributeNames: {
+      '#s': 'status'
+    },
+    ExpressionAttributeValues: {
+      ':s': 'in-progress',
+      ':p': playerNames,
+      ':r': 1,
+      ':t': 0,
+      ':k': [],
+      ':d': []
+    },
+    ReturnValues: 'NONE'
+  }).promise();
 
   const postCalls = game.players.map(async ({ connectionId: playerConnectionId }) => {
     try {
