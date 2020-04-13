@@ -77,15 +77,21 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: errorMessage };
   }
 
-  const numberOfNewDiceRolls = (game.diceRolled.length || 6) - ((playerDiceKept && playerDiceKept.length) || 0);
+  let numberOfNextDiceRolls
+  if (game.diceRolled.length === 0 || game.diceRolled.length === playerDiceKept.length) {
+    // First roll of turn or player scored all dice
+    numberOfNextDiceRolls = 6;
+  } else {
+    numberOfNextDiceRolls = game.diceRolled.length - playerDiceKept.length;
+  }
   const diceRolls = [];
-  for (let i = 0; i < numberOfNewDiceRolls; i++) {
+  for (let i = 0; i < numberOfNextDiceRolls; i++) {
     diceRolls.push(getRandomInt());
   }
 
   const validRoll = isScorableDiceRoll(diceRolls);
 
-  let data;
+  let socketMessage;
 
   if (validRoll) {
     await ddb.update({
@@ -99,7 +105,7 @@ exports.handler = async (event) => {
       ReturnValues: 'NONE'
     }).promise();
 
-    data = {
+    socketMessage = {
       type: 'game/rolleddice',
       payload: {
         playerName,
@@ -128,7 +134,7 @@ exports.handler = async (event) => {
       ReturnValues: 'NONE'
     }).promise();
 
-    data = {
+    socketMessage = {
       type: 'game/endturn',
       payload: {
         playerName,
@@ -144,7 +150,7 @@ exports.handler = async (event) => {
     try {
       await apigwManagementApi.postToConnection({
         ConnectionId: playerConnectionId,
-        Data: JSON.stringify(data)
+        Data: JSON.stringify(socketMessage)
       }).promise();
     } catch (e) {
       if (e.statusCode === 410) {
@@ -163,7 +169,7 @@ exports.handler = async (event) => {
     return { statusCode: 500, body: e.stack };
   }
 
-  console.log('rolled dice', logContext);
+  console.log('rolled dice', { ...logContext, socketMessage });
 
   return { statusCode: 200, body: 'Rolled dice' };
 };
