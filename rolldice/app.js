@@ -9,7 +9,10 @@ const {
 
 exports.handler = async (event) => {
   const { connectionId } = event.requestContext;
-  const { diceKept: playerDiceKept } = JSON.parse(event.body);
+  const {
+    diceKept: playerDiceKept,
+    endTurn
+  } = JSON.parse(event.body);
   const { Item: player } = await ddb.get({
     TableName: PLAYER_TABLE_NAME,
     Key: {
@@ -22,7 +25,7 @@ exports.handler = async (event) => {
     gameId,
     playerName
   };
-  console.log('joingame', { ...logContext, playerDiceKept });
+  console.log('rolldice', { ...logContext, playerDiceKept });
 
   const apigwManagementApi = new AWS.ApiGatewayManagementApi({
     apiVersion: '2018-11-29',
@@ -77,19 +80,22 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: errorMessage };
   }
 
-  let numberOfNextDiceRolls
-  if (game.diceRolled.length === 0 || game.diceRolled.length === playerDiceKept.length) {
-    // First roll of turn or player scored all dice
-    numberOfNextDiceRolls = 6;
-  } else {
-    numberOfNextDiceRolls = game.diceRolled.length - playerDiceKept.length;
+  let diceRolls;
+  let validRoll;
+  if (!endTurn) {
+    let numberOfNextDiceRolls;
+    if (game.diceRolled.length === 0 || game.diceRolled.length === playerDiceKept.length) {
+      // First roll of turn or player scored all dice
+      numberOfNextDiceRolls = 6;
+    } else {
+      numberOfNextDiceRolls = game.diceRolled.length - playerDiceKept.length;
+    }
+    diceRolls = [];
+    for (let i = 0; i < numberOfNextDiceRolls; i++) {
+      diceRolls.push(getRandomInt());
+    }
+    validRoll = isScorableDiceRoll(diceRolls);
   }
-  const diceRolls = [];
-  for (let i = 0; i < numberOfNextDiceRolls; i++) {
-    diceRolls.push(getRandomInt());
-  }
-
-  const validRoll = isScorableDiceRoll(diceRolls);
 
   let socketMessage;
 
@@ -109,7 +115,8 @@ exports.handler = async (event) => {
       type: 'game/rolleddice',
       payload: {
         playerName,
-        diceRolls
+        diceRolls,
+        playerDiceKept
       }
     };
   } else {
@@ -139,9 +146,10 @@ exports.handler = async (event) => {
       payload: {
         playerName,
         diceRolls,
+        playerDiceKept,
         nextPlayerTurn: playerTurns[playerTurn],
         round,
-        crapout: true
+        crapout: !endTurn
       }
     };
   }
