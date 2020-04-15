@@ -71,7 +71,7 @@ exports.handler = async (event) => {
   await ddb.update({
     TableName: GAME_TABLE_NAME,
     Key: { name: game.name },
-    UpdateExpression: 'SET #s = :s, playerTurns = :p, round = :r, playerTurn = :t, diceKept = :k, diceRolled = :d',
+    UpdateExpression: 'SET #s = :s, playerTurns = :p, round = :r, playerTurn = :t, diceKept = :k, diceRolled = :d, scoreThisTurn = :st',
     ExpressionAttributeNames: {
       '#s': 'status'
     },
@@ -81,7 +81,8 @@ exports.handler = async (event) => {
       ':r': 1,
       ':t': 0,
       ':k': [],
-      ':d': []
+      ':d': [],
+      ':st': 0
     },
     ReturnValues: 'NONE'
   }).promise();

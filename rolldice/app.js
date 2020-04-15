@@ -80,6 +80,11 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: errorMessage };
   }
 
+  let scoredThisRoll;
+  if (playerDiceKept && playerDiceKept.length > 0) {
+    scoredThisRoll = calculateScore(playerDiceKept);
+  }
+
   let diceRolls;
   let validRoll;
   if (!endTurn) {
@@ -103,10 +108,11 @@ exports.handler = async (event) => {
     await ddb.update({
       TableName: GAME_TABLE_NAME,
       Key: { name: game.name },
-      UpdateExpression: 'SET diceKept = :k, diceRolled = :d',
+      UpdateExpression: 'SET diceKept = :k, diceRolled = :d, scoreThisTurn = scoreThisTurn + :s',
       ExpressionAttributeValues: {
         ':k': playerDiceKept || [],
-        ':d': diceRolls
+        ':d': diceRolls,
+        ':s': scoredThisRoll || 0
       },
       ReturnValues: 'NONE'
     }).promise();
@@ -116,7 +122,8 @@ exports.handler = async (event) => {
       payload: {
         playerName,
         diceRolls,
-        playerDiceKept
+        playerDiceKept,
+        scoredThisRoll
       }
     };
   } else {
@@ -131,12 +138,13 @@ exports.handler = async (event) => {
     await ddb.update({
       TableName: GAME_TABLE_NAME,
       Key: { name: game.name },
-      UpdateExpression: 'SET round = :r, playerTurn = :t, diceKept = :k, diceRolled = :d',
+      UpdateExpression: 'SET round = :r, playerTurn = :t, diceKept = :k, diceRolled = :d, scoreThisTurn = :s',
       ExpressionAttributeValues: {
         ':r': round,
         ':t': playerTurn,
         ':k': [],
-        ':d': []
+        ':d': [],
+        ':s': 0
       },
       ReturnValues: 'NONE'
     }).promise();
@@ -147,6 +155,7 @@ exports.handler = async (event) => {
         playerName,
         diceRolls,
         playerDiceKept,
+        scoredThisRoll,
         nextPlayerTurn: playerTurns[playerTurn],
         round,
         crapout: !endTurn
@@ -241,6 +250,36 @@ const hasTriple = (array) => {
   const values = Object.values(valueMapOfArray);
   const biggestDuplicate = Math.max(...values);
   return biggestDuplicate >= 3;
+};
+
+const calculateScore = (array) => {
+  let score = 0;
+  const valueMapOfArray = valueMap(array);
+  for (const dieProperty in valueMapOfArray) {
+    const die = Number(dieProperty);
+    const numberOfDice = valueMapOfArray[die];
+    if (numberOfDice === 1 || numberOfDice === 2) {
+      if (die === 1) {
+        score += numberOfDice * 100;
+      } else if (die === 5) {
+        score += numberOfDice * 50;
+      }
+    } else if (numberOfDice >= 3) {
+      if (die === 1) {
+        score += 1000;
+        if (numberOfDice > 3) {
+          score += (numberOfDice - 3) * 1000;
+        }
+      } else {
+        const scoreForDie = die * 100;
+        score += scoreForDie;
+        if (numberOfDice > 3) {
+          score += (numberOfDice - 3) * scoreForDie;
+        }
+      }
+    }
+  }
+  return score;
 };
 
 /**
