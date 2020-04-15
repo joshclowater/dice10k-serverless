@@ -18,7 +18,7 @@ exports.handler = async (event) => {
   const gameId = makeId();
   logContext.gameId = gameId;
 
-  const players = [{ connectionId, name: playerName }];
+  const players = [{ connectionId, name: playerName, score: 0 }];
   await ddb.put({
     TableName: GAME_TABLE_NAME,
     Item: {

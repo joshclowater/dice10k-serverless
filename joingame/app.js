@@ -63,7 +63,7 @@ exports.handler = async (event) => {
       Key: { name: gameId },
       UpdateExpression: 'SET players = list_append(players, :p)',
       ExpressionAttributeValues: {
-        ':p': [{ connectionId, name: playerName }]
+        ':p': [{ connectionId, name: playerName, score: 0 }]
       },
       ReturnValues: 'UPDATED_NEW'
     }).promise();

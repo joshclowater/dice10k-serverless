@@ -135,17 +135,28 @@ exports.handler = async (event) => {
       playerTurn++;
     }
 
+    let scoredThisTurn;
+    let updateExpression = 'SET round = :r, playerTurn = :t, diceKept = :k, diceRolled = :d, scoreThisTurn = :s';
+    const expressionAttributeValues = {
+      ':r': round,
+      ':t': playerTurn,
+      ':k': [],
+      ':d': [],
+      ':s': 0
+    };
+
+    if (endTurn) {
+      scoredThisTurn = game.scoreThisTurn + scoredThisRoll;
+      const playerIndex = game.players.findIndex(player => player.name === playerName);
+      updateExpression += `, players[${playerIndex}].score = players[${playerIndex}].score + :sc`;
+      expressionAttributeValues[':sc'] = scoredThisTurn;
+    }
+
     await ddb.update({
       TableName: GAME_TABLE_NAME,
       Key: { name: game.name },
-      UpdateExpression: 'SET round = :r, playerTurn = :t, diceKept = :k, diceRolled = :d, scoreThisTurn = :s',
-      ExpressionAttributeValues: {
-        ':r': round,
-        ':t': playerTurn,
-        ':k': [],
-        ':d': [],
-        ':s': 0
-      },
+      UpdateExpression: updateExpression,
+      ExpressionAttributeValues: expressionAttributeValues,
       ReturnValues: 'NONE'
     }).promise();
 
@@ -158,7 +169,8 @@ exports.handler = async (event) => {
         scoredThisRoll,
         nextPlayerTurn: playerTurns[playerTurn],
         round,
-        crapout: !endTurn
+        crapout: !endTurn,
+        scoredThisTurn
       }
     };
   }
