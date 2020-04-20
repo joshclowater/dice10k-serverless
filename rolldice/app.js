@@ -42,8 +42,10 @@ exports.handler = async (event) => {
   let errorMessage;
   if (!game) {
     errorMessage = 'Player not yet connected to game';
-  } else if (game.status !== 'in-progress') {
+  } else if (game.status === 'waiting-for-players') {
     errorMessage = 'Game has not yet started';
+  } else if (game.status === 'game-over') {
+    errorMessage = 'Game is over';
   } else if (game.playerTurns[game.playerTurn] !== playerName) {
     errorMessage = 'Not current player turn';
   } else if (!game.diceRolled.length && playerDiceKept && playerDiceKept.length > 0) {
@@ -137,6 +139,7 @@ exports.handler = async (event) => {
 
     let scoredThisTurn;
     let updateExpression = 'SET round = :r, playerTurn = :t, diceKept = :k, diceRolled = :d, scoreThisTurn = :s';
+    let expressionAttributeNames;
     const expressionAttributeValues = {
       ':r': round,
       ':t': playerTurn,
@@ -145,33 +148,53 @@ exports.handler = async (event) => {
       ':s': 0
     };
 
+    let endGame;
     if (endTurn) {
       scoredThisTurn = game.scoreThisTurn + scoredThisRoll;
       const playerIndex = game.players.findIndex(player => player.name === playerName);
       updateExpression += `, players[${playerIndex}].score = players[${playerIndex}].score + :sc`;
       expressionAttributeValues[':sc'] = scoredThisTurn;
+
+      const playerTotalScore = scoredThisTurn + game.players[playerIndex].score;
+      if (playerTotalScore >= 10000) {
+        endGame = true;
+        expressionAttributeNames = { '#st': 'status' };
+        updateExpression += ', #st = :st';
+        expressionAttributeValues[':st'] = 'game-over';
+      }
     }
 
     await ddb.update({
       TableName: GAME_TABLE_NAME,
       Key: { name: game.name },
       UpdateExpression: updateExpression,
+      ExpressionAttributeNames: expressionAttributeNames,
       ExpressionAttributeValues: expressionAttributeValues,
       ReturnValues: 'NONE'
     }).promise();
 
+    let payload = {
+      playerName,
+      playerDiceKept,
+      scoredThisRoll,
+      scoredThisTurn
+    };
+    
+    if (endGame) {
+      payload.endGame = endGame;
+    } else {
+      payload = {
+        ...payload,
+        diceRolls,
+        crapout: !endTurn,
+        round,
+        nextPlayerTurn: playerTurns[playerTurn]
+      }
+    }
+
     socketMessage = {
       type: 'game/endturn',
-      payload: {
-        playerName,
-        diceRolls,
-        playerDiceKept,
-        scoredThisRoll,
-        nextPlayerTurn: playerTurns[playerTurn],
-        round,
-        crapout: !endTurn,
-        scoredThisTurn
-      }
+      payload
     };
   }
 
