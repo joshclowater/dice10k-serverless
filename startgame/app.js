@@ -94,6 +94,7 @@ exports.handler = async (event) => {
         Data: JSON.stringify({
           type: 'game/gamestarted',
           payload: {
+            playerTurns: playerNames,
             round: 1,
             playersTurn: playerNames[0]
           }
