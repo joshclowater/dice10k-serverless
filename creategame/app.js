@@ -57,7 +57,7 @@ exports.handler = async (event) => {
         payload: {
           gameId,
           playerName,
-          players
+          players: [playerName]
         }
       })
     }).promise();

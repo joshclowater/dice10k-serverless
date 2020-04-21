@@ -101,7 +101,7 @@ exports.handler = async (event) => {
         payload: {
           gameId,
           playerName,
-          players
+          players : players.map(player => player.name)
         }
       };
     } else {
