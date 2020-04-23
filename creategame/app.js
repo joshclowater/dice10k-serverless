@@ -14,6 +14,38 @@ exports.handler = async (event) => {
   const logContext = { connectionId, playerName };
   
   console.log('creategame', logContext);
+
+  const apigwManagementApi = new AWS.ApiGatewayManagementApi({
+    apiVersion: '2018-11-29',
+    endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
+  });
+
+  let errorMessage;
+  if (!playerName || !playerName.length) {
+    errorMessage = 'Player name must be passed in';
+  } else if (playerName.length > 12) {
+    errorMessage = 'Player name must be less than 12 characters';
+  }
+  if (errorMessage) {
+    console.log(errorMessage, logContext);
+    try {
+      await apigwManagementApi.postToConnection({
+        ConnectionId: connectionId,
+        Data: JSON.stringify({
+          type: 'creategame/failedtocreate',
+          payload: { errorMessage }
+        })
+      }).promise();
+    } catch (e) {
+      if (e.statusCode === 410) {
+        console.log(`Found stale connection ${connectionId}`);
+      } else {
+        console.error(`Unexpected error occured sending message to connection ${connectionId}`, e.stack);
+        throw e;
+      }
+    }
+    return { statusCode: 400, body: errorMessage };
+  }
   
   const gameId = makeId();
   logContext.gameId = gameId;
@@ -43,11 +75,6 @@ exports.handler = async (event) => {
       ':n': playerName
     }
   }).promise();
-
-  const apigwManagementApi = new AWS.ApiGatewayManagementApi({
-    apiVersion: '2018-11-29',
-    endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
-  });
   
   try {
     await apigwManagementApi.postToConnection({

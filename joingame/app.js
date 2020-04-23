@@ -32,6 +32,12 @@ exports.handler = async (event) => {
     errorMessage = 'Game with this Game ID not found';
   } else if (existingGame.status !== 'waiting-for-players') {
     errorMessage = 'This game has already started';
+  } else if (existingGame.players.length >= 12) {
+    errorMessage = 'This game is full (12 people already in game)';
+  } else if (!playerName || !playerName.length) {
+    errorMessage = 'Player name must be passed in';
+  } else if (playerName.length > 12) {
+    errorMessage = 'Player name must be less than 12 characters';
   } else if (existingGame.players.find(({ name }) => name === playerName)) {
     errorMessage = 'A player already exists in the game with this name';
   }
