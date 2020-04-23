@@ -39,6 +39,11 @@ exports.handler = async (event) => {
     }
   }).promise();
 
+  let scoredThisRoll;
+  if (playerDiceKept && playerDiceKept.length > 0) {
+    scoredThisRoll = calculateScore(playerDiceKept);
+  }
+
   let errorMessage;
   if (!game) {
     errorMessage = 'Player not yet connected to game';
@@ -57,9 +62,13 @@ exports.handler = async (event) => {
   ) {
     errorMessage = 'Dice chosen must be subset of dice rolled';
   } else if (game.diceRolled.length &&
-    (!isScorableDiceRoll(playerDiceKept) || hasNonScorableDice(playerDiceKept))
+    (scoredThisRoll === 0 || hasNonScorableDice(playerDiceKept))
   ) {
     errorMessage = 'Dice kept must be scorable';
+  } else if (game.diceRolled.length &&
+    endTurn && (game.scoreThisTurn + scoredThisRoll) < 750 && game.players.find(player => player.name === playerName).score === 0
+  ) {
+    errorMessage = 'You must score at least 750 points on your first scoring turn';
   }
   if (errorMessage) {
     console.log(errorMessage, logContext);
@@ -80,11 +89,6 @@ exports.handler = async (event) => {
       }
     }
     return { statusCode: 400, body: errorMessage };
-  }
-
-  let scoredThisRoll;
-  if (playerDiceKept && playerDiceKept.length > 0) {
-    scoredThisRoll = calculateScore(playerDiceKept);
   }
 
   let diceRolls;
@@ -189,7 +193,7 @@ exports.handler = async (event) => {
         crapout: !endTurn,
         round,
         nextPlayerTurn: playerTurns[playerTurn]
-      }
+      };
     }
 
     socketMessage = {
@@ -255,15 +259,6 @@ const getRandomInt = (min = 1, max = 7) => {
 };
 
 /**
- * If array contains a 1, 5, or 3 of a kind.
- * @param {Array} array
- * @return {Boolean}
- */
-const isScorableDiceRoll = (array) => {
-  return array.includes(1) || array.includes(5) || (array.length >= 3 && hasTriple(array));
-};
-
-/**
  * If array contains one or two 2s, 3s, 4s, or 6s.
  * @param {Array} array
  * @return {Boolean} 
@@ -274,6 +269,15 @@ const hasNonScorableDice = (array) => {
     (valueMapOfArray[3] > 0 && valueMapOfArray[3] < 3) ||
     (valueMapOfArray[4] > 0 && valueMapOfArray[4] < 3) ||
     (valueMapOfArray[6] > 0 && valueMapOfArray[6] < 3);
+};
+
+/**
+ * If array contains a 1, 5, or 3 of a kind.
+ * @param {Array} array
+ * @return {Boolean}
+ */
+const isScorableDiceRoll = (array) => {
+  return array.includes(1) || array.includes(5) || (array.length >= 3 && hasTriple(array));
 };
 
 /**
