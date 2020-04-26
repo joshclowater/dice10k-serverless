@@ -57,7 +57,8 @@ exports.handler = async (event) => {
       name: gameId,
       status: 'waiting-for-players',
       players,
-      createdOn: new Date().toISOString()
+      createdOn: new Date().toISOString(),
+      ttl: Math.floor(Date.now() / 1000) + 86400 // 24 hours in the future
     }
   }).promise();
 

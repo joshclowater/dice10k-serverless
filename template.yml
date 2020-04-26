@@ -203,8 +203,11 @@ Resources:
         ReadCapacityUnits: 5
         WriteCapacityUnits: 5
       SSESpecification:
-        SSEEnabled: True
+        SSEEnabled: False
       TableName: !Ref GameTableName
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: True
   PlayersTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -218,7 +221,7 @@ Resources:
         ReadCapacityUnits: 5
         WriteCapacityUnits: 5
       SSESpecification:
-        SSEEnabled: True
+        SSEEnabled: False
       TableName: !Ref PlayerTableName
   OnConnectFunction:
     Type: AWS::Serverless::Function
