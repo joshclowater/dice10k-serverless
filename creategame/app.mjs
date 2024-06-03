@@ -1,23 +1,22 @@
-const AWS = require('aws-sdk');
-AWS.config.update({ region: process.env.AWS_REGION });
-const ddb = new AWS.DynamoDB.DocumentClient();
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
 
-const {
-  PLAYER_TABLE_NAME,
-  GAME_TABLE_NAME
-} = process.env;
+const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+const docClient = DynamoDBDocumentClient.from(dynamoClient);
 
-exports.handler = async (event) => {
+const { PLAYER_TABLE_NAME, GAME_TABLE_NAME } = process.env;
 
+export const handler = async (event) => {
   const { connectionId } = event.requestContext;
   const { name: playerName } = JSON.parse(event.body);
   const logContext = { connectionId, playerName };
-  
+
   console.log('creategame', logContext);
 
-  const apigwManagementApi = new AWS.ApiGatewayManagementApi({
-    apiVersion: '2018-11-29',
-    endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
+  const apigwManagementClient = new ApiGatewayManagementApiClient({
+    region: process.env.AWS_REGION,
+    endpoint: `https://${event.requestContext.domainName}/${event.requestContext.stage}`,
   });
 
   let errorMessage;
@@ -26,32 +25,33 @@ exports.handler = async (event) => {
   } else if (playerName.length > 12) {
     errorMessage = 'Player name must be less than 12 characters';
   }
+
   if (errorMessage) {
     console.log(errorMessage, logContext);
     try {
-      await apigwManagementApi.postToConnection({
+      await apigwManagementClient.send(new PostToConnectionCommand({
         ConnectionId: connectionId,
         Data: JSON.stringify({
           type: 'creategame/failedtocreate',
           payload: { errorMessage }
         })
-      }).promise();
+      }));
     } catch (e) {
       if (e.statusCode === 410) {
         console.log(`Found stale connection ${connectionId}`);
       } else {
-        console.error(`Unexpected error occured sending message to connection ${connectionId}`, e.stack);
+        console.error(`Unexpected error occurred sending message to connection ${connectionId}`, e.stack);
         throw e;
       }
     }
     return { statusCode: 400, body: errorMessage };
   }
-  
+
   const gameId = makeId();
   logContext.gameId = gameId;
 
   const players = [{ connectionId, name: playerName, score: 0 }];
-  await ddb.put({
+  await docClient.send(new PutCommand({
     TableName: GAME_TABLE_NAME,
     Item: {
       name: gameId,
@@ -60,9 +60,9 @@ exports.handler = async (event) => {
       createdOn: new Date().toISOString(),
       ttl: Math.floor(Date.now() / 1000) + 86400 // 24 hours in the future
     }
-  }).promise();
+  }));
 
-  await ddb.update({
+  await docClient.send(new UpdateCommand({
     TableName: PLAYER_TABLE_NAME,
     Key: { connectionId },
     UpdateExpression: 'SET #s = :s, gameId = :g, #n = :n',
@@ -75,10 +75,10 @@ exports.handler = async (event) => {
       ':g': gameId,
       ':n': playerName
     }
-  }).promise();
-  
+  }));
+
   try {
-    await apigwManagementApi.postToConnection({
+    await apigwManagementClient.send(new PostToConnectionCommand({
       ConnectionId: connectionId,
       Data: JSON.stringify({
         type: 'game/youjoinedgame',
@@ -88,7 +88,7 @@ exports.handler = async (event) => {
           players: [playerName]
         }
       })
-    }).promise();
+    }));
   } catch (e) {
     if (e.statusCode === 410) {
       console.log(`Found stale connection, deleting ${connectionId}`);
@@ -97,9 +97,8 @@ exports.handler = async (event) => {
       throw e;
     }
   }
-  
-  console.log('created game', logContext);
 
+  console.log('created game', logContext);
   return { statusCode: 200, body: 'Created game' };
 };
 

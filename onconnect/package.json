@@ -2,7 +2,5 @@
   "name": "on-connect",
   "version": "1.0.0",
   "description": "connect handler",
-  "dependencies": {
-    "aws-sdk": "^2.434.0"
-  }
+  "dependencies": {}
 }

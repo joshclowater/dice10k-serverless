@@ -1,24 +1,34 @@
-const AWS = require('aws-sdk');
-AWS.config.update({ region: process.env.AWS_REGION });
-const ddb = new AWS.DynamoDB.DocumentClient();
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
+
+const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+const docClient = DynamoDBDocumentClient.from(dynamoClient);
 
 const {
   PLAYER_TABLE_NAME,
   GAME_TABLE_NAME
 } = process.env;
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   const { connectionId } = event.requestContext;
   const {
     diceKept: playerDiceKept,
     endTurn
   } = JSON.parse(event.body);
-  const { Item: player } = await ddb.get({
-    TableName: PLAYER_TABLE_NAME,
-    Key: {
-      connectionId
-    }
-  }).promise();
+
+  let player;
+  try {
+    const playerResult = await docClient.send(new GetCommand({
+      TableName: PLAYER_TABLE_NAME,
+      Key: { connectionId }
+    }));
+    player = playerResult.Item;
+  } catch (e) {
+    console.error('Error retrieving player:', e);
+    return { statusCode: 500, body: 'Error retrieving player' };
+  }
+
   const { gameId, name: playerName } = player;
   const logContext = {
     connectionId,
@@ -27,17 +37,22 @@ exports.handler = async (event) => {
   };
   console.log('rolldice', { ...logContext, playerDiceKept });
 
-  const apigwManagementApi = new AWS.ApiGatewayManagementApi({
-    apiVersion: '2018-11-29',
-    endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
+  const apigwManagementClient = new ApiGatewayManagementApiClient({
+    region: process.env.AWS_REGION,
+    endpoint: `https://${event.requestContext.domainName}/${event.requestContext.stage}`,
   });
 
-  const { Item: game } = await ddb.get({
-    TableName: GAME_TABLE_NAME,
-    Key: {
-      name: gameId
-    }
-  }).promise();
+  let game;
+  try {
+    const gameResult = await docClient.send(new GetCommand({
+      TableName: GAME_TABLE_NAME,
+      Key: { name: gameId }
+    }));
+    game = gameResult.Item;
+  } catch (e) {
+    console.error('Error retrieving game:', e);
+    return { statusCode: 500, body: 'Error retrieving game' };
+  }
 
   let scoredThisRoll;
   if (playerDiceKept && playerDiceKept.length > 0) {
@@ -73,13 +88,13 @@ exports.handler = async (event) => {
   if (errorMessage) {
     console.log(errorMessage, logContext);
     try {
-      await apigwManagementApi.postToConnection({
+      await apigwManagementClient.send(new PostToConnectionCommand({
         ConnectionId: connectionId,
         Data: JSON.stringify({
           type: 'game/failedtorolldice',
           payload: { errorMessage }
         })
-      }).promise();
+      }));
     } catch (e) {
       if (e.statusCode === 410) {
         console.log(`Found stale connection ${connectionId}`);
@@ -111,7 +126,7 @@ exports.handler = async (event) => {
   let socketMessage;
 
   if (validRoll) {
-    await ddb.update({
+    await docClient.send(new UpdateCommand({
       TableName: GAME_TABLE_NAME,
       Key: { name: game.name },
       UpdateExpression: 'SET diceKept = :k, diceRolled = :d, scoreThisTurn = scoreThisTurn + :s',
@@ -121,7 +136,7 @@ exports.handler = async (event) => {
         ':s': scoredThisRoll || 0
       },
       ReturnValues: 'NONE'
-    }).promise();
+    }));
 
     socketMessage = {
       type: 'game/rolleddice',
@@ -168,14 +183,14 @@ exports.handler = async (event) => {
       }
     }
 
-    await ddb.update({
+    await docClient.send(new UpdateCommand({
       TableName: GAME_TABLE_NAME,
       Key: { name: game.name },
       UpdateExpression: updateExpression,
       ExpressionAttributeNames: expressionAttributeNames,
       ExpressionAttributeValues: expressionAttributeValues,
       ReturnValues: 'NONE'
-    }).promise();
+    }));
 
     let payload = {
       playerName,
@@ -204,10 +219,10 @@ exports.handler = async (event) => {
 
   const postCalls = game.players.map(async ({ connectionId: playerConnectionId }) => {
     try {
-      await apigwManagementApi.postToConnection({
+      await apigwManagementClient.send(new PostToConnectionCommand({
         ConnectionId: playerConnectionId,
         Data: JSON.stringify(socketMessage)
-      }).promise();
+      }));
     } catch (e) {
       if (e.statusCode === 410) {
         console.log(`Found stale connection ${playerConnectionId}`);

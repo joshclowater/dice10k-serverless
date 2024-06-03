@@ -1,31 +1,35 @@
-const AWS = require('aws-sdk');
-AWS.config.update({ region: process.env.AWS_REGION });
-const ddb = new AWS.DynamoDB.DocumentClient();
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
 
-const {
-  PLAYER_TABLE_NAME,
-  GAME_TABLE_NAME
-} = process.env;
+const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+const docClient = DynamoDBDocumentClient.from(dynamoClient);
 
-exports.handler = async (event) => {
+const { PLAYER_TABLE_NAME, GAME_TABLE_NAME } = process.env;
 
+export const handler = async (event) => {
   const { connectionId } = event.requestContext;
   const { name: playerName, gameId } = JSON.parse(event.body);
   const logContext = { connectionId, playerName, gameId };
-  
+
   console.log('joingame', logContext);
 
-  const apigwManagementApi = new AWS.ApiGatewayManagementApi({
-    apiVersion: '2018-11-29',
-    endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
+  const apigwManagementClient = new ApiGatewayManagementApiClient({
+    region: process.env.AWS_REGION,
+    endpoint: `https://${event.requestContext.domainName}/${event.requestContext.stage}`,
   });
 
-  const { Item: existingGame } = await ddb.get({
-    TableName: GAME_TABLE_NAME,
-    Key: {
-      name: gameId
-    }
-  }).promise();
+  let existingGame;
+  try {
+    const result = await docClient.send(new GetCommand({
+      TableName: GAME_TABLE_NAME,
+      Key: { name: gameId }
+    }));
+    existingGame = result.Item;
+  } catch (e) {
+    console.error('Error retrieving game:', e.stack);
+    return { statusCode: 500, body: 'Error retrieving game' };
+  }
 
   let errorMessage;
   if (!existingGame) {
@@ -41,30 +45,31 @@ exports.handler = async (event) => {
   } else if (existingGame.players.find(({ name }) => name === playerName)) {
     errorMessage = 'A player already exists in the game with this name';
   }
+
   if (errorMessage) {
     console.log(errorMessage, logContext);
     try {
-      await apigwManagementApi.postToConnection({
+      await apigwManagementClient.send(new PostToConnectionCommand({
         ConnectionId: connectionId,
         Data: JSON.stringify({
           type: 'joingame/failedtojoin',
           payload: { errorMessage }
         })
-      }).promise();
+      }));
     } catch (e) {
       if (e.statusCode === 410) {
         console.log(`Found stale connection ${connectionId}`);
       } else {
-        console.error(`Unexpected error occured sending message to connection ${connectionId}`, e.stack);
+        console.error(`Unexpected error occurred sending message to connection ${connectionId}`, e.stack);
         throw e;
       }
     }
     return { statusCode: 400, body: errorMessage };
   }
 
-  let game;
+  let updatedGame;
   try {
-    game = await ddb.update({
+    const updateResult = await docClient.send(new UpdateCommand({
       TableName: GAME_TABLE_NAME,
       Key: { name: gameId },
       UpdateExpression: 'SET players = list_append(players, :p)',
@@ -72,19 +77,20 @@ exports.handler = async (event) => {
         ':p': [{ connectionId, name: playerName, score: 0 }]
       },
       ReturnValues: 'UPDATED_NEW'
-    }).promise();
+    }));
+    updatedGame = updateResult.Attributes;
   } catch (e) {
     console.error('Error adding player to game', e.stack);
-    return { statusCode: 500 };
+    return { statusCode: 500, body: 'Error updating game' };
   }
-
-  const { players } = game.Attributes;
+  
+  const { players } = updatedGame;
   console.log('updated players', {
     ...logContext,
     players
   });
 
-  await ddb.update({
+  await docClient.send(new UpdateCommand({
     TableName: PLAYER_TABLE_NAME,
     Key: { connectionId },
     UpdateExpression: 'SET #s = :s, gameId = :g, #n = :n',
@@ -97,8 +103,9 @@ exports.handler = async (event) => {
       ':g': gameId,
       ':n': playerName
     }
-  }).promise();
+  }));
 
+  // Broadcasting the join event to all players in the game
   const postCalls = players.map(async ({ connectionId: playerConnectionId }) => {
     let data;
     if (playerConnectionId === connectionId) {
@@ -107,7 +114,7 @@ exports.handler = async (event) => {
         payload: {
           gameId,
           playerName,
-          players : players.map(player => player.name)
+          players: players.map(player => player.name)
         }
       };
     } else {
@@ -119,28 +126,27 @@ exports.handler = async (event) => {
       };
     }
     try {
-      await apigwManagementApi.postToConnection({
+      await apigwManagementClient.send(new PostToConnectionCommand({
         ConnectionId: playerConnectionId,
         Data: JSON.stringify(data)
-      }).promise();
+      }));
     } catch (e) {
       if (e.statusCode === 410) {
         console.log(`Found stale connection ${playerConnectionId}`);
       } else {
-        console.error(`Unexpected error occured sending message to connection ${playerConnectionId}`, e.stack);
+        console.error(`Unexpected error occurred sending message to connection ${playerConnectionId}`, e.stack);
         throw e;
       }
     }
   });
-  
+
   try {
     await Promise.all(postCalls);
   } catch (e) {
     console.error('At least one message failed to send', e.stack);
-    return { statusCode: 500, body: e.stack };
+    return { statusCode: 500, body: 'Failed to send update to all players' };
   }
 
   console.log('joined game', logContext);
-
   return { statusCode: 200, body: 'Joined game' };
 };
