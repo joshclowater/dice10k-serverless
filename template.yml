@@ -208,7 +208,7 @@ Resources:
       CodeUri: onconnect/
       Handler: app.handler
       MemorySize: 256
-      Runtime: nodejs20.x
+      Runtime: nodejs24.x
       Environment:
         Variables:
           PLAYER_TABLE_NAME: !Ref PlayerTableName
@@ -236,7 +236,7 @@ Resources:
       CodeUri: ondisconnect/
       Handler: app.handler
       MemorySize: 256
-      Runtime: nodejs20.x
+      Runtime: nodejs24.x
       Environment:
         Variables:
           PLAYER_TABLE_NAME: !Ref PlayerTableName
@@ -264,7 +264,7 @@ Resources:
       CodeUri: creategame/
       Handler: app.handler
       MemorySize: 256
-      Runtime: nodejs20.x
+      Runtime: nodejs24.x
       Environment:
         Variables:
           PLAYER_TABLE_NAME: !Ref PlayerTableName
@@ -295,7 +295,7 @@ Resources:
       CodeUri: joingame/
       Handler: app.handler
       MemorySize: 256
-      Runtime: nodejs20.x
+      Runtime: nodejs24.x
       Environment:
         Variables:
           PLAYER_TABLE_NAME: !Ref PlayerTableName
@@ -326,7 +326,7 @@ Resources:
       CodeUri: rolldice/
       Handler: app.handler
       MemorySize: 256
-      Runtime: nodejs20.x
+      Runtime: nodejs24.x
       Environment:
         Variables:
           PLAYER_TABLE_NAME: !Ref PlayerTableName
@@ -357,7 +357,7 @@ Resources:
       CodeUri: startgame/
       Handler: app.handler
       MemorySize: 256
-      Runtime: nodejs20.x
+      Runtime: nodejs24.x
       Environment:
         Variables:
           PLAYER_TABLE_NAME: !Ref PlayerTableName
